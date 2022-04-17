@@ -138,63 +138,74 @@ class Environment:
         sorted_val_loss = sorted(self.val_loss, reverse=True)
         # top1, top2, top3 = sorted_val_loss[:3]
         # top1, top2, top3 = ent_losses[top1], ent_losses[top2], ent_losses[top3]
-
+        for val_loss in sorted_val_loss[:3]:
+            self.entities.append(Entity(ent_losses[val_loss].gens))
+            self.mutate(self.entities[-1])
+        
         for val_loss in sorted_val_loss[3:]:
             self.mutate(ent_losses[val_loss])
 
         self.reset_models()
-
+        self.entity_count = len(self.entities)
         self.val_loss = []
 
     # Функция мутации особи
     def mutate(self, entity):
 
         i = randint(1, len(entity.gens["layers"])-1)
-
-        if entity.gens["layers"][i]["type"] in ACTIVATION_TYPES:
-            entity.gens["layers"][i]["in"] = int(entity.gens["layers"][i]["in"] * (1 + uniform(-0.2, 0.2)))
-            entity.gens["layers"][i]["out"] = entity.gens["layers"][i]["in"]
-            entity.gens["layers"][i - 1]["out"] = entity.gens["layers"][i]["in"]
-            if i != (len(entity.gens["layers"]) - 1):
-                entity.gens["layers"][i + 1]["in"] = entity.gens["layers"][i]["out"]
-            else:
-                entity.gens["layers"][i]["out"] = 1
-        else:
-            entity.gens["layers"][i]["in"] = int(entity.gens["layers"][i]["in"] * (1 + uniform(-0.2, 0.2)))
-            entity.gens["layers"][i-1]["out"] = entity.gens["layers"][i]["in"]
-
-        if randint(0, 10) == 0:
-            if randint(0, 5) > 1:  # изменяем слой в теле гена
+        
+        layer = entity.gens["layers"][i]
+        
+        if layer["type"] in LAYER_TYPES:
+            layer["in"] = int(layer["in"] * (1 + uniform(-0.2, 0.2)))
+            k = i-1
+            while entity.gens["layers"][k]["type"] in ACTIVATION_TYPES:
+                entity.gens["layers"][k]["out"] = layer["in"]
+                entity.gens["layers"][k]["in"] = layer["in"]
+                k -= 1
+            entity.gens["layers"][k]["out"] = layer["in"]
+        
+        entity.gens["layers"][i] = layer
+        
+        # Добавить или модифицировать тип слоя
+        if randint(0, 10) <= 2:
+            p = randint(0, 5)
+            if (p > 3) and (layer["type"] in ACTIVATION_TYPES):  # изменяем слой в теле гена
                 if randint(1, 2) == 1:
                     entity.gens["layers"][i] = {
                         "type": choice(LAYER_TYPES),
                         "in": entity.gens["layers"][i]["in"],
                         "out": entity.gens["layers"][i]["out"]
                     }
-                else:
-                    entity.gens["layers"][i] = {
-                        "type": choice(ACTIVATION_TYPES),
-                        "in": entity.gens["layers"][i]["in"],
-                        "out": entity.gens["layers"][i]["out"]
-                    }
-                    entity.gens["layers"][i-1]["out"] = entity.gens["layers"][i]["in"]
-            else:  # Добавляем слой в конец
+            elif p > 1:  # Добавляем слой в конец
                 if randint(1, 3) == 1:  # Обычные слои
-                    l_type = choice(LAYER_TYPES)
                     layer = {
-                        "type": l_type,
+                        "type": choice(LAYER_TYPES),
                         "in": randint(0, 10),
                         "out": 1
                     }
-                    entity.gens["layers"][-1]["out"] = layer["in"]
-                else:  # Слои активации
+                    k = len(entity.gens["layers"]) - 1
+                    while entity.gens["layers"][k]["type"] in ACTIVATION_TYPES:
+                        entity.gens["layers"][k]["out"] = layer["in"]
+                        entity.gens["layers"][k]["in"] = layer["in"]
+                        k -= 1
+                    entity.gens["layers"][k]["out"] = layer["in"]
+                    entity.gens["layers"].append(layer)
+                else:  # Слой активации
                     l_type = choice(ACTIVATION_TYPES)
                     layer = {
                         "type": l_type,
                         "in": 1,
                         "out": 1
                     }
-                entity.gens["layers"].append(layer)
+                    entity.gens["layers"].append(layer)
+            else:  # Добавляем слой активации на место i
+                layer = {
+                    "type": choice(ACTIVATION_TYPES),
+                    "in": entity.gens["layers"][i-1]["out"],
+                    "out": entity.gens["layers"][i-1]["out"]
+                }
+                entity.gens["layers"].insert(i, layer)
 
     # Перегенерируем параметры всех нейронок
     def reset_models(self):
