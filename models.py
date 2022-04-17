@@ -4,7 +4,7 @@ from random import choice, randint, uniform
 
 
 LAYER_TYPES = ("Linear", )  # "Dropout",)
-ACTIVATION_TYPES = ("ReLU", "Tanh", "Softmax", "Sigmoid")
+ACTIVATION_TYPES = ("ReLU", "Tanh", "Sigmoid")
 CRITERION_TYPES = ("L1Loss", "MSELoss")
 OPTIMIZER_TYPES = ("SGD", "Adam",)
 
@@ -151,12 +151,21 @@ class Environment:
 
         i = randint(1, len(entity.gens["layers"])-1)
 
-        entity.gens["layers"][i]["in"] = int(entity.gens["layers"][i]["in"] * (1 + uniform(-0.2, 0.2)))
-        entity.gens["layers"][i-1]["out"] = entity.gens["layers"][i]["in"]
+        if entity.gens["layers"][i]["type"] in ACTIVATION_TYPES:
+            entity.gens["layers"][i]["in"] = int(entity.gens["layers"][i]["in"] * (1 + uniform(-0.2, 0.2)))
+            entity.gens["layers"][i]["out"] = entity.gens["layers"][i]["in"]
+            entity.gens["layers"][i - 1]["out"] = entity.gens["layers"][i]["in"]
+            if i != (len(entity.gens["layers"]) - 1):
+                entity.gens["layers"][i + 1]["in"] = entity.gens["layers"][i]["out"]
+            else:
+                entity.gens["layers"][i]["out"] = 1
+        else:
+            entity.gens["layers"][i]["in"] = int(entity.gens["layers"][i]["in"] * (1 + uniform(-0.2, 0.2)))
+            entity.gens["layers"][i-1]["out"] = entity.gens["layers"][i]["in"]
 
         if randint(0, 10) == 0:
-            if randint(0, 5) > 1:
-                if randint(1, 3) == 1:
+            if randint(0, 5) > 1:  # изменяем слой в теле гена
+                if randint(1, 2) == 1:
                     entity.gens["layers"][i] = {
                         "type": choice(LAYER_TYPES),
                         "in": entity.gens["layers"][i]["in"],
@@ -168,7 +177,8 @@ class Environment:
                         "in": entity.gens["layers"][i]["in"],
                         "out": entity.gens["layers"][i]["out"]
                     }
-            else:
+                    entity.gens["layers"][i-1]["out"] = entity.gens["layers"][i]["in"]
+            else:  # Добавляем слой в конец
                 if randint(1, 3) == 1:  # Обычные слои
                     l_type = choice(LAYER_TYPES)
                     layer = {
@@ -189,9 +199,10 @@ class Environment:
     # Перегенерируем параметры всех нейронок
     def reset_models(self):
         for ent in self.entities:
-            for layer in ent.model.children():
-                if hasattr(layer, 'reset_parameters'):
-                    layer.reset_parameters()
+            ent.init_gen()
+            # for layer in ent.model.children():
+            #     if hasattr(layer, 'reset_parameters'):
+            #         layer.reset_parameters()
 
     # Генерация рандомного набора генов для одной особи
     def generate_random_gen(self):
