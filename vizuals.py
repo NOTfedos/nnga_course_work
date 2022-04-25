@@ -5,11 +5,15 @@ from mycolorpy import colorlist as mcp
 def plot_env_history(env):
     color_list = mcp.gen_color(cmap="winter", n=env.entity_count)
 
-    x = range(1, env.evo_epochs+1)
+    print(len(color_list), color_list)
+
+    x = list(range(1, env.evo_epochs+1))
 
     for entity in env.entities:
-        plt.plot(x, entity.entity_history, color=color_list[entity.color])
+        print(x, entity.entity_history, entity.color)
+        plt.plot(x, entity.entity_history, label=entity.color+1)  # color=color_list[entity.color], label=entity.color)
 
+    plt.legend()
     plt.show()
 
 

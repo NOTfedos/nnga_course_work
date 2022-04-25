@@ -17,8 +17,6 @@ class Entity:
     
     parent = None
     child = None
-    
-    entity_history = []
 
     CRITERIONS = {
         "L1Loss": torch.nn.L1Loss,
@@ -26,13 +24,16 @@ class Entity:
         "BCELoss": torch.nn.BCELoss
     }
 
-    def __init__(self, gens: dict, color, parent=None):
+    def __init__(self, gens: dict, color, parent=None, entity_history=None):
         self.gens = gens
         self.init_gen()
         self.layers = []
         self.parent = parent
         self.color = color
-        self.entity_history = []
+        if entity_history is not None:
+            self.entity_history = entity_history
+        else:
+            self.entity_history = []
 
     def init_gen(self):
         # Creating the NN model
@@ -95,14 +96,15 @@ class Entity:
 class Environment:
     entities = None
     val_loss = []
-    history = []
-    
+
     evo_epochs = 0
 
     def __init__(self, entity_count, train_loader, train_epochs=50, validation_loader=None, test_loader=None):
+        # Create entities
         self.entity_count = entity_count if entity_count > 3 else 3
         self.create_entities(entity_count)
 
+        # Set loaders
         self.train_loader = train_loader
         self.validation_loader = validation_loader
         self.test_loader = test_loader
@@ -111,73 +113,81 @@ class Environment:
 
         self.evo_epochs = 0
 
+        # Set device for training
         device = torch.device('cpu')
         if torch.cuda.is_available():
             device = torch.device('cuda')
 
+        self.history = []
+
         print(device)
 
-    # Создание существ
+    # Entities create with random gens
     def create_entities(self, entity_count):
         self.entities = []
         for i in range(entity_count):
             self.entities.append(Entity(self.generate_random_gen(), color=i))
 
-    # Обучение особей на 1 эволюционной эпохе
+    # Train all the entities
     def train_epoch(self):
         for ent in self.entities:
             ent.train(self.train_loader, self.train_epochs)
 
-    # Валидация результатов обучения особей
+    # Validate entities (append last loss to each ones)
     def validate_entities(self):
         losses = []
         
         for i, ent in enumerate(self.entities):
             
             ent_loss = 0
+
+            # Loop through all validation dataset and accumulate loss
             for batch in self.validation_loader:
                 inputs, labels = batch
                 outputs = ent.predict(inputs)
                 ans_loss = ent.loss(outputs, labels)
                 
                 ent_loss += ans_loss.item()
-                
+
+            # Save loss to entity history
             ent_loss = ent_loss / len(self.validation_loader) / self.validation_loader.batch_size
             ent.entity_history.append(ent_loss)
             losses.append(ent_loss)
 
+        # Set the count of losses in loss history lists
         self.evo_epochs += 1
-        self.val_loss = losses
+        self.val_loss = losses[:]
         return losses
 
-    # Шаг эволюции
+    # Step the evolution
     def evo_step(self):
         if len(self.val_loss) == 0:
             print("Validate entities")
             return
 
+        # Create dict of val_loss: entity
         ent_losses = dict(zip(self.val_loss, self.entities))
-        sorted_val_loss = sorted(self.val_loss, reverse=True)
+
+        # Sort the list of val losses
+        sorted_val_loss = sorted(self.val_loss, key=lambda x: 1000 if x is None else x)
+
+        # Save first three models with less loss
         top1, top2, top3 = sorted_val_loss[:3]
+
+        # Create new list of entities, first to save the best 3 entities
         new_list = [ent_losses[top1], ent_losses[top2], ent_losses[top3]]
-        
-        for val_loss in sorted_val_loss[:3]:
-            
-            new_list.append(Entity(ent_losses[val_loss].gens, color=ent_losses[val_loss].color))
-            new_list[-1].entity_history = ent_losses[val_loss].entity_history[:]
+
+        # Append mutated entities
+        for val_loss in sorted_val_loss[:-3]:
+            new_list.append(Entity(ent_losses[val_loss].gens, color=ent_losses[val_loss].color,
+                                   entity_history=ent_losses[val_loss].entity_history[:]))
             self.mutate(new_list[-1])
-        
-        for val_loss in sorted_val_loss[3:]:
-            self.mutate(ent_losses[val_loss])
-            new_list.append(ent_losses[val_loss])
         
         self.entities = new_list
                 
         self.reset_models()
         self.entity_count = len(self.entities)
         self.val_loss = []
-        
-        self.history.append(ent_losses[val_loss])
 
     # Функция мутации особи
     def mutate(self, entity):
@@ -288,9 +298,9 @@ class Environment:
         opt = dict()
         opt_name = choice(OPTIMIZER_TYPES)
         if opt_name == "SGD":
-            opt["momentum"] = uniform(0.0001, 0.3)
+            opt["momentum"] = uniform(0.0001, 0.1)
         opt["name"] = opt_name
-        opt["lr"] = uniform(0.01, 0.3)
+        opt["lr"] = uniform(0.01, 0.1)
 
         # Compiling gen
         gen = {
