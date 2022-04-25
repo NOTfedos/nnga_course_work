@@ -1,6 +1,7 @@
 import torch
 # import torch.nn.functional as F  # вроде как для функций, но есть и в nn
 from random import choice, randint, uniform
+from copy import deepcopy
 
 
 LAYER_TYPES = ("Linear", )  # "Dropout",)
@@ -101,7 +102,7 @@ class Environment:
 
     def __init__(self, entity_count, train_loader, train_epochs=50, validation_loader=None, test_loader=None):
         # Create entities
-        self.entity_count = entity_count if entity_count > 3 else 3
+        self.entity_count = entity_count if entity_count > 7 else 7
         self.create_entities(entity_count)
 
         # Set loaders
@@ -113,12 +114,12 @@ class Environment:
 
         self.evo_epochs = 0
 
+        self.history = []
+
         # Set device for training
         device = torch.device('cpu')
         if torch.cuda.is_available():
             device = torch.device('cuda')
-
-        self.history = []
 
         print(device)
 
@@ -179,7 +180,8 @@ class Environment:
 
         # Append mutated entities
         for val_loss in sorted_val_loss[:-3]:
-            new_list.append(Entity(ent_losses[val_loss].gens, color=ent_losses[val_loss].color,
+            print(val_loss, ent_losses[val_loss].color)
+            new_list.append(Entity(deepcopy(ent_losses[val_loss].gens), color=ent_losses[val_loss].color,
                                    entity_history=ent_losses[val_loss].entity_history[:]))
             self.mutate(new_list[-1])
         
