@@ -6,7 +6,7 @@ from copy import deepcopy
 
 LAYER_TYPES = ("Linear", )  # "Dropout",)
 ACTIVATION_TYPES = ("ReLU", "Tanh", "Sigmoid")
-CRITERION_TYPES = ("L1Loss", "MSELoss")
+CRITERION_TYPES = ("MSELoss", )  # ("L1Loss", "MSELoss")
 OPTIMIZER_TYPES = ("SGD", "Adam",)
 
 
@@ -31,6 +31,7 @@ class Entity:
         self.layers = []
         self.parent = parent
         self.color = color
+
         if entity_history is not None:
             self.entity_history = entity_history
         else:
@@ -95,16 +96,13 @@ class Entity:
 
 
 class Environment:
-    entities = None
-    val_loss = []
+    # entities = None
+    # val_loss = []
+    #
+    # evo_epochs = 0
 
-    evo_epochs = 0
-
-    def __init__(self, entity_count, train_loader, train_epochs=50, validation_loader=None, test_loader=None):
-        # Create entities
-        self.entity_count = entity_count if entity_count > 7 else 7
-        self.create_entities(entity_count)
-
+    def __init__(self, entity_count, train_loader, train_epochs=50, validation_loader=None, test_loader=None,
+                 in_shape=1, out_shape=1):
         # Set loaders
         self.train_loader = train_loader
         self.validation_loader = validation_loader
@@ -114,7 +112,16 @@ class Environment:
 
         self.evo_epochs = 0
 
+        self.in_shape = in_shape
+        self.out_shape = out_shape
+
         self.history = []
+
+        # Create entities
+        self.entity_count = entity_count if entity_count > 7 else 7
+        self.create_entities(entity_count)
+
+        self.val_loss = []
 
         # Set device for training
         device = torch.device('cpu')
@@ -127,7 +134,7 @@ class Environment:
     def create_entities(self, entity_count):
         self.entities = []
         for i in range(entity_count):
-            self.entities.append(Entity(self.generate_random_gen(), color=i))
+            self.entities.append(Entity(self.generate_random_gen(self.in_shape, self.out_shape), color=i))
 
     # Train all the entities
     def train_epoch(self):
@@ -197,7 +204,38 @@ class Environment:
         i = randint(1, len(entity.gens["layers"])-1)
         
         layer = entity.gens["layers"][i]
-        
+
+        # Удаление слоя
+        if randint(0, 20) == 1:
+
+            # Проходимся по дальнейшим слоям активации и присваиваем им предыдущие значения входных параметров
+            k = i+1
+            while (k < len(entity.gens["layers"])) and entity.gens["layers"][k]["type"] in ACTIVATION_TYPES:
+                entity.gens["layers"][k]["out"] = entity.gens["layers"][i-1]["out"]
+                entity.gens["layers"][k]["in"] = entity.gens["layers"][i-1]["out"]
+                k += 1
+            # Если все оставшиеся слои - активационные
+            if k == len(entity.gens["layers"]):
+                # Последущие слои - по 1 параметры
+                for j in range(i+1, len(entity.gens["layers"]), 1):
+                    entity.gens["layers"][k]["out"] = self.out_shape
+                    entity.gens["layers"][k]["in"] = self.out_shape
+
+                k = i - 1
+                # Все слои до - тоже 1
+                while entity.gens["layers"][k]["type"] in ACTIVATION_TYPES:
+                    entity.gens["layers"][k]["out"] = self.out_shape
+                    entity.gens["layers"][k]["in"] = self.out_shape
+                    k -= 1
+                entity.gens["layers"][k]["out"] = self.out_shape
+            else:
+                entity.gens["layers"][k]["in"] = entity.gens["layers"][i-1]["out"]
+
+            entity.gens["layers"].pop(i)
+
+            return
+
+        # Изменение количества параметров
         if layer["type"] in LAYER_TYPES:
             layer["in"] = int(layer["in"] * (1 + uniform(-0.2, 0.2)))
             k = i-1
@@ -206,6 +244,7 @@ class Environment:
                 entity.gens["layers"][k]["in"] = layer["in"]
                 k -= 1
             entity.gens["layers"][k]["out"] = layer["in"]
+            return
         
         entity.gens["layers"][i] = layer
         
@@ -219,12 +258,13 @@ class Environment:
                         "in": entity.gens["layers"][i]["in"],
                         "out": entity.gens["layers"][i]["out"]
                     }
+                    return
             elif p > 1:  # Добавляем слой в конец
                 if randint(1, 3) == 1:  # Обычные слои
                     layer = {
                         "type": choice(LAYER_TYPES),
                         "in": randint(0, 10),
-                        "out": 1
+                        "out": self.out_shape
                     }
                     k = len(entity.gens["layers"]) - 1
                     while entity.gens["layers"][k]["type"] in ACTIVATION_TYPES:
@@ -237,8 +277,8 @@ class Environment:
                     l_type = choice(ACTIVATION_TYPES)
                     layer = {
                         "type": l_type,
-                        "in": 1,
-                        "out": 1
+                        "in": self.out_shape,
+                        "out": self.out_shape
                     }
                     entity.gens["layers"].append(layer)
             else:  # Добавляем слой активации на место i
@@ -258,7 +298,7 @@ class Environment:
             #         layer.reset_parameters()
 
     # Генерация рандомного набора генов для одной особи
-    def generate_random_gen(self):
+    def generate_random_gen(self, in_shape, out_shape):
 
         # Set layer count
         layers_count = randint(1, 10)
@@ -268,7 +308,7 @@ class Environment:
         l_type = choice(LAYER_TYPES)
         layer = {
             "type": l_type,
-            "in": 1,
+            "in": in_shape,
             "out": randint(1, 40)
         }
         layers.append(layer)
@@ -293,7 +333,7 @@ class Environment:
         layers.append({
             "type": "Linear",
             "in": layers[-1]["out"],
-            "out": 1
+            "out": out_shape
         })
 
         # Generating optimizer
