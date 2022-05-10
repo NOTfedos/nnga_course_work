@@ -142,7 +142,7 @@ class Environment:
             ent.train(self.train_loader, self.train_epochs)
 
     # Validate entities (append last loss to each ones)
-    def validate_entities(self):
+    def validate_entities(self, loader, to_save=False):
         losses = []
         
         for i, ent in enumerate(self.entities):
@@ -150,7 +150,7 @@ class Environment:
             ent_loss = 0
 
             # Loop through all validation dataset and accumulate loss
-            for batch in self.validation_loader:
+            for batch in loader:
                 inputs, labels = batch
                 outputs = ent.predict(inputs)
                 ans_loss = ent.loss(outputs, labels)
@@ -158,13 +158,18 @@ class Environment:
                 ent_loss += ans_loss.item()
 
             # Save loss to entity history
-            ent_loss = ent_loss / len(self.validation_loader) / self.validation_loader.batch_size
-            ent.entity_history.append(ent_loss)
+            ent_loss = ent_loss / len(loader) / loader.batch_size
+
+            if to_save:
+                ent.entity_history.append(ent_loss)
+
             losses.append(ent_loss)
 
-        # Set the count of losses in loss history lists
-        self.evo_epochs += 1
-        self.val_loss = losses[:]
+        if to_save:
+            self.history.append(deepcopy(losses))
+            self.evo_epochs += 1
+            self.val_loss = losses[:]
+
         return losses
 
     # Step the evolution
@@ -189,7 +194,7 @@ class Environment:
         for val_loss in sorted_val_loss[:-3]:
             print(val_loss, ent_losses[val_loss].color)
             new_list.append(Entity(deepcopy(ent_losses[val_loss].gens), color=ent_losses[val_loss].color,
-                                   entity_history=ent_losses[val_loss].entity_history[:]))
+                                   entity_history=ent_losses[val_loss].entity_history[:], parent=ent_losses[val_loss]))
             self.mutate(new_list[-1])
         
         self.entities = new_list
@@ -218,8 +223,8 @@ class Environment:
             if k == len(entity.gens["layers"]):
                 # Последущие слои - по 1 параметры
                 for j in range(i+1, len(entity.gens["layers"]), 1):
-                    entity.gens["layers"][k]["out"] = self.out_shape
-                    entity.gens["layers"][k]["in"] = self.out_shape
+                    entity.gens["layers"][j]["out"] = self.out_shape
+                    entity.gens["layers"][j]["in"] = self.out_shape
 
                 k = i - 1
                 # Все слои до - тоже 1
@@ -309,7 +314,7 @@ class Environment:
         layer = {
             "type": l_type,
             "in": in_shape,
-            "out": randint(1, 40)
+            "out": randint(1, 30)
         }
         layers.append(layer)
 
@@ -320,7 +325,7 @@ class Environment:
                 layer = {
                     "type": l_type,
                     "in": layers[i-1]["out"],
-                    "out": randint(1, 40)
+                    "out": randint(1, 30)
                 }
             else:  # Слои активации
                 l_type = choice(ACTIVATION_TYPES)
@@ -340,9 +345,9 @@ class Environment:
         opt = dict()
         opt_name = choice(OPTIMIZER_TYPES)
         if opt_name == "SGD":
-            opt["momentum"] = uniform(0.0001, 0.1)
+            opt["momentum"] = uniform(0.0001, 0.001)
         opt["name"] = opt_name
-        opt["lr"] = uniform(0.01, 0.1)
+        opt["lr"] = uniform(0.001, 0.01)
 
         # Compiling gen
         gen = {
