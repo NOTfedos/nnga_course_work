@@ -211,7 +211,7 @@ class Environment:
         layer = entity.gens["layers"][i]
 
         # Удаление слоя
-        if randint(0, 20) == 1:
+        if randint(0, 5) == 1:
 
             # Проходимся по дальнейшим слоям активации и присваиваем им предыдущие значения входных параметров
             k = i+1
@@ -254,7 +254,7 @@ class Environment:
         entity.gens["layers"][i] = layer
         
         # Добавить или модифицировать тип слоя
-        if randint(0, 10) <= 2:
+        if randint(0, 10) <= 5:
             p = randint(0, 5)
             if (p > 3) and (layer["type"] in ACTIVATION_TYPES):  # изменяем слой в теле гена
                 if randint(1, 2) == 1:
@@ -306,7 +306,7 @@ class Environment:
     def generate_random_gen(self, in_shape, out_shape):
 
         # Set layer count
-        layers_count = randint(1, 10)
+        layers_count = randint(1, 6)
 
         # Creating first layer (with 1 input)
         layers = []
